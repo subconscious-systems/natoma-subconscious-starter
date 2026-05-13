@@ -23,7 +23,7 @@ python/
 └── src/
     ├── model.py     Subconscious client (ChatOpenAI with custom auth header).
     ├── mcp.py       Discovers Natoma MCPs from env, loads their tools.
-    └── graph.py     create_react_agent(model, tools) — the whole agent.
+    └── graph.py     create_agent(model, tools) — the whole agent.
 ```
 
 ## Making it yours
@@ -43,7 +43,7 @@ python/
 
   ```python
   from langgraph.checkpoint.memory import InMemorySaver
-  agent = create_react_agent(model, tools, prompt=SYSTEM_PROMPT, checkpointer=InMemorySaver())
+  agent = create_agent(model, tools, system_prompt=SYSTEM_PROMPT, checkpointer=InMemorySaver())
   # then pass config={"configurable": {"thread_id": "session-1"}} to ainvoke()
   ```
 

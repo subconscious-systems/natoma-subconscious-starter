@@ -9,7 +9,7 @@ From the **repo root** (not inside `typescript/`):
 ```bash
 pnpm dlx create-next-app@latest web --typescript --app --no-tailwind --no-src-dir --import-alias "@/*"
 cd web
-pnpm add @langchain/core @langchain/langgraph @langchain/openai @langchain/mcp-adapters dotenv ai
+pnpm add langchain @langchain/core @langchain/langgraph @langchain/openai @langchain/mcp-adapters dotenv ai
 ```
 
 The `ai` package is the [Vercel AI SDK](https://sdk.vercel.ai/) — gives you streaming and a `useChat` hook for free.

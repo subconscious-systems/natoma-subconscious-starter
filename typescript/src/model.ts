@@ -17,6 +17,12 @@ export function buildModel(): ChatOpenAI {
   // Subconscious authenticates with "Authorization: Api-Key <key>", not the
   // OpenAI default "Bearer <key>". Override via defaultHeaders and pass a
   // placeholder apiKey (the SDK requires it but our header takes precedence).
+  //
+  // `chat_template_kwargs.enable_thinking=false` disables the model's internal
+  // thinking step by default. Set SUBCONSCIOUS_ENABLE_THINKING=1 to turn it on.
+  const enableThinking = ["1", "true", "yes"].includes(
+    (process.env.SUBCONSCIOUS_ENABLE_THINKING ?? "").toLowerCase(),
+  );
   return new ChatOpenAI({
     model,
     apiKey: "not-used",
@@ -24,6 +30,9 @@ export function buildModel(): ChatOpenAI {
     configuration: {
       baseURL,
       defaultHeaders: { Authorization: `Api-Key ${apiKey}` },
+    },
+    modelKwargs: {
+      chat_template_kwargs: { enable_thinking: enableThinking },
     },
   });
 }

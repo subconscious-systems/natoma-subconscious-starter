@@ -1,5 +1,5 @@
-"""The agent graph: Subconscious model + Natoma MCP tools, wired by LangGraph."""
-from langgraph.prebuilt import create_react_agent
+"""The agent graph: Subconscious model + Natoma MCP tools, wired by LangChain."""
+from langchain.agents import create_agent
 
 from src.mcp import load_mcp_tools
 from src.model import build_model
@@ -16,5 +16,5 @@ before giving up. When you have what you need, give the user a clear, direct ans
 async def build_agent():
     model = build_model()
     mcp_client, tools = await load_mcp_tools()
-    agent = create_react_agent(model, tools, prompt=SYSTEM_PROMPT)
+    agent = create_agent(model, tools, system_prompt=SYSTEM_PROMPT)
     return agent, mcp_client

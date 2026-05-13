@@ -1,42 +1,59 @@
 """Discover Natoma MCPs from environment variables and load their tools."""
 import os
+import re
 from typing import Any
 
 from langchain_mcp_adapters.client import MultiServerMCPClient
 
 
-def _discover_servers() -> dict[str, dict[str, Any]]:
-    auth_header = os.environ.get("NATOMA_AUTH_HEADER", "Authorization")
-    auth_scheme = os.environ.get("NATOMA_AUTH_SCHEME", "Bearer")
+NATOMA_ENV_PATTERN = re.compile(r"^NATOMA_MCP_(.+)_(URL|KEY)$")
 
+
+def _parse_mcp_env() -> tuple[dict[str, str], dict[str, str]]:
+    """Return ({name: url}, {name: key}) parsed from NATOMA_MCP_*_URL/_KEY env vars."""
     urls: dict[str, str] = {}
     keys: dict[str, str] = {}
-    for env_name, value in os.environ.items():
-        if not env_name.startswith("NATOMA_MCP_") or not value:
-            continue
-        if env_name.endswith("_URL"):
-            name = env_name[len("NATOMA_MCP_"):-len("_URL")].lower()
-            urls[name] = value
-        elif env_name.endswith("_KEY"):
-            name = env_name[len("NATOMA_MCP_"):-len("_KEY")].lower()
-            keys[name] = value
 
+    for env_name, value in os.environ.items():
+        if not value:
+            continue
+        match = NATOMA_ENV_PATTERN.match(env_name)
+        if not match:
+            continue
+
+        name = match.group(1).lower()
+        kind = match.group(2)
+        (urls if kind == "URL" else keys)[name] = value
+
+    return urls, keys
+
+
+def _build_auth_header(token: str) -> dict[str, str]:
+    name = os.environ.get("NATOMA_AUTH_HEADER", "Authorization")
+    scheme = os.environ.get("NATOMA_AUTH_SCHEME", "Bearer")
+    value = f"{scheme} {token}" if scheme else token
+    return {name: value}
+
+
+def _discover_servers() -> dict[str, dict[str, Any]]:
+    urls, keys = _parse_mcp_env()
     servers: dict[str, dict[str, Any]] = {}
+
     for name, url in urls.items():
         if name not in keys:
             print(f"  ! skipping MCP '{name}': missing NATOMA_MCP_{name.upper()}_KEY")
             continue
-        token = f"{auth_scheme} {keys[name]}".strip() if auth_scheme else keys[name]
         servers[name] = {
             "transport": "streamable_http",
             "url": url,
-            "headers": {auth_header: token},
+            "headers": _build_auth_header(keys[name]),
         }
+
     return servers
 
 
 async def load_mcp_tools():
-    """Return (client, tools). Client kept alive for the agent's lifetime."""
+    """Return (client, tools). The client is kept alive for the agent's lifetime."""
     servers = _discover_servers()
     if not servers:
         print(

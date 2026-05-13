@@ -47,9 +47,7 @@ async function main(): Promise<void> {
     while (true) {
       const userInput = (await rl.question("you > ")).trim();
       if (!userInput) continue;
-      if (userInput.toLowerCase() === "exit" || userInput.toLowerCase() === "quit") {
-        break;
-      }
+      if (["exit", "quit"].includes(userInput.toLowerCase())) break;
 
       messages.push(new HumanMessage(userInput));
       const start = messages.length;

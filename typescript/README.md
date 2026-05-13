@@ -24,7 +24,7 @@ typescript/
     ├── agent.ts     Entrypoint — REPL loop (run with `npm start` via tsx).
     ├── model.ts     Subconscious client (ChatOpenAI with custom auth header).
     ├── mcp.ts       Discovers Natoma MCPs from env, loads their tools.
-    └── graph.ts     createReactAgent({ llm, tools }) — the whole agent.
+    └── graph.ts     createAgent({ model, tools }) — the whole agent.
 ```
 
 ## Making it yours
@@ -46,7 +46,7 @@ typescript/
 
   ```ts
   import { MemorySaver } from "@langchain/langgraph";
-  const agent = createReactAgent({ llm, tools, prompt: SYSTEM_PROMPT, checkpointer: new MemorySaver() });
+  const agent = createAgent({ model, tools, systemPrompt: SYSTEM_PROMPT, checkpointer: new MemorySaver() });
   // then pass { configurable: { thread_id: "session-1" } } as the second arg to invoke()
   ```
 
