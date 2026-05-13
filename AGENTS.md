@@ -91,23 +91,41 @@ The earlier `create_react_agent` API from `langgraph.prebuilt` is deprecated in 
 
 ## File layout (both languages)
 
-| File          | Purpose                                                           |
-| ------------- | ----------------------------------------------------------------- |
-| `model.*`     | Builds the Subconscious chat client (ChatOpenAI + custom header). |
-| `mcp.*`       | Discovers Natoma MCPs from env vars, returns LangChain tools.     |
-| `graph.*`     | Wires model + tools into an agent via `create_agent`.             |
-| `agent.*`     | REPL entrypoint.                                                  |
+| File          | Purpose                                                                       |
+| ------------- | ----------------------------------------------------------------------------- |
+| `model.*`     | Builds the Subconscious chat client (ChatOpenAI + custom header).             |
+| `mcp.*`       | Discovers MCPs (Natoma-managed + direct) from env vars, returns tools.        |
+| `tools.*`     | Custom (non-MCP) tools defined locally and registered alongside MCP ones.     |
+| `graph.*`     | Wires model + (MCP + custom) tools into an agent via `create_agent`.          |
+| `agent.*`     | Streaming REPL entrypoint (uses `astream_events` / `streamEvents`).           |
 
 ## Environment-variable conventions
 
-MCPs are configured by paired env vars — no code changes to add one:
+MCPs are configured by paired env vars — no code changes to add one. Two
+patterns are supported and can be mixed freely in the same `.env`:
+
+**Natoma-managed MCPs** (proxied through `natoma.app`):
 
 ```text
 NATOMA_MCP_<NAME>_URL=https://<integration>.mcp.natoma.app/...
-NATOMA_MCP_<NAME>_KEY=<api-key>
+NATOMA_MCP_<NAME>_KEY=<natoma-api-key>
 ```
 
-`<NAME>` is a free-form label (`GMAIL`, `LINEAR`, `WORK_INBOX`, …). On startup, both starters scan `process.env` / `os.environ` for matching pairs and register them automatically.
+Auth uses `NATOMA_AUTH_HEADER` / `NATOMA_AUTH_SCHEME` (defaults to
+`Authorization: Bearer <key>`).
+
+**Direct MCPs** (connect straight to a service's own MCP endpoint, e.g.
+`https://mcp.linear.app/mcp`):
+
+```text
+MCP_<NAME>_URL=https://...
+MCP_<NAME>_KEY=<service-api-key>
+```
+
+Auth is always sent as a plain `Authorization: Bearer <key>` — the
+`NATOMA_AUTH_*` overrides do **not** apply to direct MCPs.
+
+`<NAME>` is a free-form label (`GMAIL`, `LINEAR`, `WORK_INBOX`, …). On startup, both starters scan `process.env` / `os.environ` for matching pairs and register them automatically. Natoma servers are namespaced internally as `natoma:<name>` so a Natoma `LINEAR` and a direct `LINEAR` can coexist.
 
 Additional env knobs:
 

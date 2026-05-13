@@ -1,14 +1,29 @@
+/**
+ * Discover MCP servers from environment variables and load their tools.
+ *
+ * Two env-var patterns are supported:
+ *
+ *   Natoma-managed MCPs (proxied through natoma.app):
+ *     NATOMA_MCP_<NAME>_URL / NATOMA_MCP_<NAME>_KEY
+ *
+ *   Direct MCP servers (connect to the service's own MCP endpoint):
+ *     MCP_<NAME>_URL / MCP_<NAME>_KEY
+ *
+ * Both use streamable-HTTP transport. Direct MCPs send the key as a
+ * standard "Authorization: Bearer <key>" header.
+ */
 import { MultiServerMCPClient } from "@langchain/mcp-adapters";
 
 const NATOMA_ENV_PATTERN = /^NATOMA_MCP_(.+)_(URL|KEY)$/;
+const DIRECT_ENV_PATTERN = /^MCP_(.+)_(URL|KEY)$/;
 
-type McpServerConfig = {
+type HttpServerConfig = {
   transport: "http";
   url: string;
   headers: Record<string, string>;
 };
 
-function parseMcpEnv(): {
+function scanEnv(pattern: RegExp): {
   urls: Record<string, string>;
   keys: Record<string, string>;
 } {
@@ -17,9 +32,8 @@ function parseMcpEnv(): {
 
   for (const [envName, value] of Object.entries(process.env)) {
     if (!value) continue;
-    const match = envName.match(NATOMA_ENV_PATTERN);
+    const match = envName.match(pattern);
     if (!match) continue;
-
     const [, rawName, kind] = match;
     const name = rawName.toLowerCase();
     if (kind === "URL") urls[name] = value;
@@ -29,28 +43,44 @@ function parseMcpEnv(): {
   return { urls, keys };
 }
 
-function buildAuthHeader(token: string): Record<string, string> {
+function buildNatomaAuthHeader(token: string): Record<string, string> {
   const name = process.env.NATOMA_AUTH_HEADER ?? "Authorization";
   const scheme = process.env.NATOMA_AUTH_SCHEME ?? "Bearer";
   return { [name]: scheme ? `${scheme} ${token}` : token };
 }
 
-function discoverServers(): Record<string, McpServerConfig> {
-  const { urls, keys } = parseMcpEnv();
-  const servers: Record<string, McpServerConfig> = {};
+function discoverServers(): Record<string, HttpServerConfig> {
+  const servers: Record<string, HttpServerConfig> = {};
 
-  for (const [name, url] of Object.entries(urls)) {
-    const token = keys[name];
-    if (!token) {
+  // --- Natoma-managed MCPs ---
+  const natoma = scanEnv(NATOMA_ENV_PATTERN);
+  for (const [name, url] of Object.entries(natoma.urls)) {
+    if (!natoma.keys[name]) {
       console.log(
-        `  ! skipping MCP '${name}': missing NATOMA_MCP_${name.toUpperCase()}_KEY`,
+        `  ! skipping natoma MCP '${name}': missing NATOMA_MCP_${name.toUpperCase()}_KEY`,
+      );
+      continue;
+    }
+    servers[`natoma:${name}`] = {
+      transport: "http",
+      url,
+      headers: buildNatomaAuthHeader(natoma.keys[name]),
+    };
+  }
+
+  // --- Direct MCP servers ---
+  const direct = scanEnv(DIRECT_ENV_PATTERN);
+  for (const [name, url] of Object.entries(direct.urls)) {
+    if (!direct.keys[name]) {
+      console.log(
+        `  ! skipping MCP '${name}': missing MCP_${name.toUpperCase()}_KEY`,
       );
       continue;
     }
     servers[name] = {
       transport: "http",
       url,
-      headers: buildAuthHeader(token),
+      headers: { Authorization: `Bearer ${direct.keys[name]}` },
     };
   }
 
@@ -63,14 +93,14 @@ export async function loadMcpTools() {
 
   if (names.length === 0) {
     console.log(
-      "  ! no Natoma MCPs configured — add NATOMA_MCP_<NAME>_URL/_KEY " +
+      "  ! no MCPs configured — add MCP_<NAME>_URL/_KEY " +
         "pairs to .env to give the agent tools.",
     );
-    return { client: null, tools: [] };
+    return { client: null, tools: [] as any[] };
   }
 
   console.log(`  discovered ${names.length} MCP(s): ${names.join(", ")}`);
-  const client = new MultiServerMCPClient(servers);
+  const client = new MultiServerMCPClient({ mcpServers: servers });
   const tools = await client.getTools();
   console.log(`  loaded ${tools.length} tool(s)`);
   return { client, tools };

@@ -8,7 +8,8 @@ You need Node 20+ and [pnpm](https://pnpm.io/) (`brew install pnpm` or `npm inst
 
 ```bash
 cp .env.example .env
-# Edit .env: paste SUBCONSCIOUS_API_KEY and at least one NATOMA_MCP_*_URL/_KEY pair.
+# Edit .env: paste SUBCONSCIOUS_API_KEY and at least one MCP pair —
+# either NATOMA_MCP_<NAME>_URL/_KEY (Natoma-managed) or MCP_<NAME>_URL/_KEY (direct).
 
 pnpm install
 pnpm start
@@ -20,10 +21,12 @@ pnpm start
 typescript/
 ├── package.json     Dependencies pinned for hackathon stability.
 ├── tsconfig.json
+├── images/          Bundled image fixtures used by the sample_image tool.
 └── src/
-    ├── agent.ts     Entrypoint — REPL loop (run with `npm start` via tsx).
+    ├── agent.ts     Entrypoint — streaming REPL loop (run with `npm start` via tsx).
     ├── model.ts     Subconscious client (ChatOpenAI with custom auth header).
-    ├── mcp.ts       Discovers Natoma MCPs from env, loads their tools.
+    ├── mcp.ts       Discovers MCPs (Natoma-managed + direct) from env, loads their tools.
+    ├── tools.ts     Custom (non-MCP) tools registered alongside MCP ones.
     └── graph.ts     createAgent({ model, tools }) — the whole agent.
 ```
 
@@ -31,17 +34,12 @@ typescript/
 
 - **Edit the system prompt** in `src/graph.ts` to shape behavior.
 - **Add more MCPs** in `.env` — they're picked up automatically. No code change.
-- **Send images.** In `agent.ts`, swap `new HumanMessage(userInput)` for:
-
-  ```ts
-  new HumanMessage({
-    content: [
-      { type: "text", text: userInput },
-      { type: "image_url", image_url: { url: "https://..." } },
-    ],
-  });
-  ```
-
+  Two patterns are supported: `NATOMA_MCP_<NAME>_URL/_KEY` (Natoma gateway) and
+  `MCP_<NAME>_URL/_KEY` (any service's own MCP endpoint, auth as
+  `Authorization: Bearer <key>`).
+- **Add a custom tool.** Define one with `tool(...)` in `src/tools.ts` and
+  append it to `getCustomTools()` — `graph.ts` registers MCP + custom tools
+  together. See the bundled `sampleImage` tool for a multimodal example.
 - **Add memory across turns.** Use a checkpointer:
 
   ```ts

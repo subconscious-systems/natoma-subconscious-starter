@@ -1,4 +1,16 @@
-"""Discover Natoma MCPs from environment variables and load their tools."""
+"""Discover MCP servers from environment variables and load their tools.
+
+Two env-var patterns are supported:
+
+  Natoma-managed MCPs (proxied through natoma.app):
+    NATOMA_MCP_<NAME>_URL / NATOMA_MCP_<NAME>_KEY
+
+  Direct MCP servers (connect to the service's own MCP endpoint):
+    MCP_<NAME>_URL / MCP_<NAME>_KEY
+
+Both use streamable-HTTP transport. Direct MCPs send the key as a
+standard "Authorization: Bearer <key>" header.
+"""
 import os
 import re
 from typing import Any
@@ -7,17 +19,18 @@ from langchain_mcp_adapters.client import MultiServerMCPClient
 
 
 NATOMA_ENV_PATTERN = re.compile(r"^NATOMA_MCP_(.+)_(URL|KEY)$")
+DIRECT_ENV_PATTERN = re.compile(r"^MCP_(.+)_(URL|KEY)$")
 
 
-def _parse_mcp_env() -> tuple[dict[str, str], dict[str, str]]:
-    """Return ({name: url}, {name: key}) parsed from NATOMA_MCP_*_URL/_KEY env vars."""
+def _scan_env(pattern: re.Pattern) -> tuple[dict[str, str], dict[str, str]]:
+    """Return ({name: url}, {name: key}) for env vars matching *pattern*."""
     urls: dict[str, str] = {}
     keys: dict[str, str] = {}
 
     for env_name, value in os.environ.items():
         if not value:
             continue
-        match = NATOMA_ENV_PATTERN.match(env_name)
+        match = pattern.match(env_name)
         if not match:
             continue
 
@@ -28,7 +41,7 @@ def _parse_mcp_env() -> tuple[dict[str, str], dict[str, str]]:
     return urls, keys
 
 
-def _build_auth_header(token: str) -> dict[str, str]:
+def _natoma_auth_header(token: str) -> dict[str, str]:
     name = os.environ.get("NATOMA_AUTH_HEADER", "Authorization")
     scheme = os.environ.get("NATOMA_AUTH_SCHEME", "Bearer")
     value = f"{scheme} {token}" if scheme else token
@@ -36,17 +49,30 @@ def _build_auth_header(token: str) -> dict[str, str]:
 
 
 def _discover_servers() -> dict[str, dict[str, Any]]:
-    urls, keys = _parse_mcp_env()
     servers: dict[str, dict[str, Any]] = {}
 
-    for name, url in urls.items():
-        if name not in keys:
-            print(f"  ! skipping MCP '{name}': missing NATOMA_MCP_{name.upper()}_KEY")
+    # --- Natoma-managed MCPs ---
+    natoma_urls, natoma_keys = _scan_env(NATOMA_ENV_PATTERN)
+    for name, url in natoma_urls.items():
+        if name not in natoma_keys:
+            print(f"  ! skipping natoma MCP '{name}': missing NATOMA_MCP_{name.upper()}_KEY")
+            continue
+        servers[f"natoma:{name}"] = {
+            "transport": "streamable_http",
+            "url": url,
+            "headers": _natoma_auth_header(natoma_keys[name]),
+        }
+
+    # --- Direct MCP servers ---
+    direct_urls, direct_keys = _scan_env(DIRECT_ENV_PATTERN)
+    for name, url in direct_urls.items():
+        if name not in direct_keys:
+            print(f"  ! skipping MCP '{name}': missing MCP_{name.upper()}_KEY")
             continue
         servers[name] = {
             "transport": "streamable_http",
             "url": url,
-            "headers": _build_auth_header(keys[name]),
+            "headers": {"Authorization": f"Bearer {direct_keys[name]}"},
         }
 
     return servers
@@ -57,8 +83,8 @@ async def load_mcp_tools():
     servers = _discover_servers()
     if not servers:
         print(
-            "  ! no Natoma MCPs configured — add NATOMA_MCP_<NAME>_URL/_KEY "
-            "pairs to .env to give the agent tools."
+            "  ! no MCPs configured — add MCP_<NAME>_URL/_KEY pairs to .env "
+            "to give the agent tools."
         )
         return None, []
 

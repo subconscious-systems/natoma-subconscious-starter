@@ -8,7 +8,8 @@ You need Python 3.11+ and [uv](https://docs.astral.sh/uv/) (`brew install uv` or
 
 ```bash
 cp .env.example .env
-# Edit .env: paste SUBCONSCIOUS_API_KEY and at least one NATOMA_MCP_*_URL/_KEY pair.
+# Edit .env: paste SUBCONSCIOUS_API_KEY and at least one MCP pair —
+# either NATOMA_MCP_<NAME>_URL/_KEY (Natoma-managed) or MCP_<NAME>_URL/_KEY (direct).
 
 uv sync
 uv run python agent.py
@@ -18,11 +19,13 @@ uv run python agent.py
 
 ```text
 python/
-├── agent.py         Entrypoint — REPL loop.
+├── agent.py         Entrypoint — streaming REPL loop.
 ├── pyproject.toml   Dependencies pinned for hackathon stability.
+├── images/          Bundled image fixtures used by the sample_image tool.
 └── src/
     ├── model.py     Subconscious client (ChatOpenAI with custom auth header).
-    ├── mcp.py       Discovers Natoma MCPs from env, loads their tools.
+    ├── mcp.py       Discovers MCPs (Natoma-managed + direct) from env, loads their tools.
+    ├── tools.py     Custom (non-MCP) tools registered alongside MCP ones.
     └── graph.py     create_agent(model, tools) — the whole agent.
 ```
 
@@ -30,15 +33,12 @@ python/
 
 - **Edit the system prompt** in `src/graph.py` to shape behavior.
 - **Add more MCPs** in `.env` — they're picked up automatically. No code change.
-- **Send images.** In `agent.py`, swap `HumanMessage(content=user_input)` for:
-
-  ```python
-  HumanMessage(content=[
-      {"type": "text", "text": user_input},
-      {"type": "image_url", "image_url": {"url": "https://..."}},
-  ])
-  ```
-
+  Two patterns are supported: `NATOMA_MCP_<NAME>_URL/_KEY` (Natoma gateway) and
+  `MCP_<NAME>_URL/_KEY` (any service's own MCP endpoint, auth as
+  `Authorization: Bearer <key>`).
+- **Add a custom tool.** Drop a `@tool` function into `src/tools.py` and append
+  it to `get_custom_tools()` — `graph.py` registers MCP + custom tools together.
+  See the bundled `sample_image` tool for a multimodal example.
 - **Add memory across turns.** Use a checkpointer:
 
   ```python
@@ -47,7 +47,9 @@ python/
   # then pass config={"configurable": {"thread_id": "session-1"}} to ainvoke()
   ```
 
-- **Inspect what the model is doing.** Set `LANGCHAIN_TRACING_V2=true` and a LangSmith key, or print the full `result["messages"]` to see the trace.
+- **Inspect what the model is doing.** The REPL already streams text, tool
+  calls, and per-step timing via `agent.astream_events(...)`. For deeper
+  tracing, set `LANGCHAIN_TRACING_V2=true` and a LangSmith key.
 
 ## Going further
 
